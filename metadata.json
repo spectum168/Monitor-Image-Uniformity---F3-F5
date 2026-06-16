@@ -1,0 +1,6 @@
+{
+  "name": "Mae Tha Hospital Radiology QC",
+  "description": "แอปพลิเคชันควบคุมคุณภาพ (QC) งานรังสีเทคนิค โรงพยาบาลแม่ทา สำหรับตรวจสอบจอภาพ (TG18-QC), Receptor Plate Uniformity และประเมินคุณภาพภาพถ่ายทางรังสี",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
