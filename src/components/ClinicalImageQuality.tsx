@@ -50,8 +50,24 @@ export default function ClinicalImageQuality({
   const [markers, setMarkers] = useState<'Pass' | 'Fail'>('Pass');
   
   const [notes, setNotes] = useState('');
-  const [driveImageUrl, setDriveImageUrl] = useState('');
+  const [driveImageUrls, setDriveImageUrls] = useState<string[]>(['']);
   const [successMsg, setSuccessMsg] = useState('');
+
+  const handleAddUrlField = () => {
+    setDriveImageUrls(prev => [...prev, '']);
+  };
+
+  const handleUrlFieldChange = (index: number, val: string) => {
+    setDriveImageUrls(prev => prev.map((url, i) => i === index ? val : url));
+  };
+
+  const handleRemoveUrlField = (index: number) => {
+    if (driveImageUrls.length <= 1) {
+      setDriveImageUrls(['']);
+      return;
+    }
+    setDriveImageUrls(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Google Drive integrations
   const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([]);
@@ -100,7 +116,10 @@ export default function ClinicalImageQuality({
       if (googleToken) {
         const resultFile = await uploadQcImageToDrive(googleToken, file);
         // Auto capture original web url or file id
-        setDriveImageUrl(resultFile.id);
+        setDriveImageUrls(prev => {
+          const filtered = prev.filter(Boolean);
+          return [...filtered, resultFile.id];
+        });
         await fetchDriveImages(); // refresh roster
         setSuccessMsg(`อัปโหลดรูปภาพทดสอบ "${file.name}" เข้า Google Drive เรียบร้อย!`);
         setTimeout(() => setSuccessMsg(''), 4000);
@@ -108,7 +127,10 @@ export default function ClinicalImageQuality({
         const reader = new FileReader();
         reader.onload = (event) => {
           if (event.target?.result) {
-            setDriveImageUrl(event.target.result as string);
+            setDriveImageUrls(prev => {
+              const filtered = prev.filter(Boolean);
+              return [...filtered, event.target.result as string];
+            });
             setSuccessMsg(`โหลดรูปภาพจากเครื่องเรียบร้อย (บันทึกออฟไลน์)`);
             setTimeout(() => setSuccessMsg(''), 3000);
           }
@@ -132,6 +154,9 @@ export default function ClinicalImageQuality({
       sharpness === 'Pass' && 
       markers === 'Pass';
 
+    // Join all non-empty URLs with a comma
+    const joinedUrl = driveImageUrls.map(u => u.trim()).filter(Boolean).join(',');
+
     const newRecord: ImageQualityRecord = {
       id: `CI-${Date.now()}`,
       date,
@@ -143,13 +168,13 @@ export default function ClinicalImageQuality({
       sharpness,
       markers,
       notes: notes.trim(),
-      driveImageUrl: driveImageUrl.trim(),
+      driveImageUrl: joinedUrl,
       status: isOverallPass ? 'Pass' : 'Fail'
     };
 
     onAddRecord(newRecord);
     setNotes('');
-    setDriveImageUrl('');
+    setDriveImageUrls(['']);
     setSuccessMsg('บันทึกรายงานประเมินความสมบูรณ์ภาพถ่ายรังสีแพทย์เวชปฏิบัติทั่วไปสำเร็จ!');
     setTimeout(() => setSuccessMsg(''), 4000);
   };
@@ -380,9 +405,11 @@ export default function ClinicalImageQuality({
           {/* Drive & Remarks Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-sans text-slate-500 mb-1.5 font-semibold flex items-center justify-between">
-                <span>บันทึกภาพถ่ายการประเมินรังสี (Google Drive Link / Photo)</span>
-                <label className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-sans text-slate-700 font-bold flex items-center gap-1.5 font-sans">
+                  📁 รายการภาพถ่ายประเมินรังสีประกอบรายงาน (Google Drive Links / Photos)
+                </span>
+                <label className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer select-none">
                   {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                   <span>{googleToken ? 'อัปโหลดเข้า Drive / เลือกไฟล์' : 'เลือกไฟล์ภาพในเครื่อง'}</span>
                   <input
@@ -393,46 +420,74 @@ export default function ClinicalImageQuality({
                     disabled={isUploading}
                   />
                 </label>
-              </label>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="วางลิงก์ไฟล์รูปภาพ หรืออัปโหลดจากไฟล์ด้านบน"
-                  value={driveImageUrl}
-                  onChange={(e) => setDriveImageUrl(e.target.value)}
-                  className="flex-1 bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 font-sans focus:outline-none"
-                  id="clinical-drive-url"
-                />
-                {driveImageUrl && (
-                  <a
-                    href={getDriveOriginalUrl(driveImageUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 flex items-center justify-center transition cursor-pointer"
-                  >
-                    <LinkIcon className="w-4 h-4" />
-                  </a>
-                )}
               </div>
 
-              {driveImageUrl && (
-                <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-3">
-                  <img
-                    src={getDriveDirectImageUrl(driveImageUrl)}
-                    alt="Preview"
-                    className="w-20 h-20 object-contain bg-slate-200 rounded border border-slate-200"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1576091158783-a212ecb13df4?q=80&w=200&auto=format&fit=crop';
-                    }}
-                  />
-                  <div>
-                    <span className="text-xs text-slate-400 font-medium font-sans">พรีวิวรูปภาพตรวจสอบ:</span>
-                    <p className="text-xs text-slate-800 font-medium font-sans truncate max-w-[200px]">รูปเอกซเรย์กายวิภาคคลินิก</p>
+              <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                {driveImageUrls.map((urlVal, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs font-mono text-slate-400 font-bold">#{idx + 1}</span>
+                      <input
+                        type="text"
+                        placeholder="วางลิงก์ เช่น https://drive.google.com/file/d/..."
+                        value={urlVal}
+                        onChange={(e) => handleUrlFieldChange(idx, e.target.value)}
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-sans focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        id={`clinical-drive-url-${idx}`}
+                      />
+                      {urlVal && (
+                        <a
+                          href={getDriveOriginalUrl(urlVal)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg border border-slate-200 aspect-square flex items-center justify-center transition cursor-pointer"
+                          title="เปิดภาพใน Drive"
+                        >
+                          <LinkIcon className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveUrlField(idx)}
+                        className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-100 aspect-square flex items-center justify-center transition cursor-pointer"
+                        title="ลบรายการลิงก์นี้"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {urlVal && (
+                      <div className="ml-6 p-2 bg-slate-50 border border-slate-150/60 rounded-xl flex items-center gap-3">
+                        <img
+                          src={getDriveDirectImageUrl(urlVal)}
+                          alt={`Preview #${idx + 1}`}
+                          className="w-12 h-12 object-contain bg-slate-200 rounded border border-slate-250 animate-fade-in"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1576091158783-a212ecb13df4?q=80&w=200&auto=format&fit=crop';
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[10px] text-slate-400 font-bold block">พรีวิวรูปภาพ #{idx + 1}:</span>
+                          <span className="text-[10px] text-slate-600 truncate block font-mono">
+                            {urlVal.length > 40 ? urlVal.substring(0, 40) + '...' : urlVal}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddUrlField}
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-indigo-600 hover:text-indigo-800 border border-slate-200 text-xs font-semibold rounded-xl cursor-pointer transition select-none"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>เพิ่มช่องวางลิงก์ภาพถ่าย (+ Add image link)</span>
+              </button>
             </div>
 
             <div>
@@ -496,7 +551,16 @@ export default function ClinicalImageQuality({
                 <div
                   key={file.id}
                   onClick={() => {
-                    setDriveImageUrl(file.id);
+                    setDriveImageUrls((prev) => {
+                      const copy = [...prev];
+                      const emptyIdx = copy.findIndex((u) => !u.trim());
+                      if (emptyIdx !== -1) {
+                        copy[emptyIdx] = file.id;
+                      } else {
+                        copy.push(file.id);
+                      }
+                      return copy;
+                    });
                     setSuccessMsg(`เลือกภาพจากแบรนด์ Drive: ${file.name} เรียบร้อย!`);
                     setTimeout(() => setSuccessMsg(''), 3000);
                   }}
@@ -522,9 +586,7 @@ export default function ClinicalImageQuality({
                           await deleteDriveFile(googleToken, file.id);
                           setSuccessMsg(`ลบรูปภาพ "${file.name}" ออกจากระบบ Google Drive สำเร็จ!`);
                           setTimeout(() => setSuccessMsg(''), 4000);
-                          if (driveImageUrl === file.id) {
-                            setDriveImageUrl('');
-                          }
+                          setDriveImageUrls((prev) => prev.map((u) => (u === file.id ? '' : u)));
                           await fetchDriveImages();
                         } catch (err: any) {
                           alert(`เกิดปัญหาลบรูปภาพ: ${err.message || err}`);

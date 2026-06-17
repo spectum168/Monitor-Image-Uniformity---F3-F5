@@ -54,9 +54,25 @@ export default function F5UniformityQC({
   // States
   const [hasArtifacts, setHasArtifacts] = useState<'Yes' | 'No'>('No');
   const [notes, setNotes] = useState('');
-  const [driveImageUrl, setDriveImageUrl] = useState('');
+  const [driveImageUrls, setDriveImageUrls] = useState<string[]>(['']);
   const [successMsg, setSuccessMsg] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+
+  const handleAddUrlField = () => {
+    setDriveImageUrls(prev => [...prev, '']);
+  };
+
+  const handleUrlFieldChange = (index: number, val: string) => {
+    setDriveImageUrls(prev => prev.map((url, i) => i === index ? val : url));
+  };
+
+  const handleRemoveUrlField = (index: number) => {
+    if (driveImageUrls.length <= 1) {
+      setDriveImageUrls(['']);
+      return;
+    }
+    setDriveImageUrls(prev => prev.filter((_, i) => i !== index));
+  };
 
   // F8-2 Dark Noise Table Rows State
   const [darkNoiseRows, setDarkNoiseRows] = useState<DarkNoiseRow[]>(() => [
@@ -122,14 +138,20 @@ export default function F5UniformityQC({
     try {
       if (googleToken) {
         const resultFile = await uploadQcImageToDrive(googleToken, file);
-        setDriveImageUrl(resultFile.id);
+        setDriveImageUrls(prev => {
+          const filtered = prev.filter(Boolean);
+          return [...filtered, resultFile.id];
+        });
         setSuccessMsg(`อัปโหลดรูปภาพทดสอบ "${file.name}" เข้า Google Drive เรียบร้อย!`);
         setTimeout(() => setSuccessMsg(''), 4000);
       } else {
         const reader = new FileReader();
         reader.onload = (event) => {
           if (event.target?.result) {
-            setDriveImageUrl(event.target.result as string);
+            setDriveImageUrls(prev => {
+              const filtered = prev.filter(Boolean);
+              return [...filtered, event.target.result as string];
+            });
             setSuccessMsg(`โหลดรูปภาพจากเครื่องเรียบร้อย (บันทึกออฟไลน์)`);
             setTimeout(() => setSuccessMsg(''), 3000);
           }
@@ -149,6 +171,9 @@ export default function F5UniformityQC({
     // Standard QC threshold: PV variation (Difference %) <= 10% and no artifacts detected as Pass
     const isPass = calcDiff <= 10 && hasArtifacts === 'No';
 
+    // Join all non-empty URLs with a comma
+    const joinedUrl = driveImageUrls.map(u => u.trim()).filter(Boolean).join(',');
+
     const newRecord: F5UniformityQCRecord = {
       id: `F5-${Date.now()}`,
       date,
@@ -163,14 +188,14 @@ export default function F5UniformityQC({
       differencePercent: calcDiff,
       hasArtifacts,
       notes: notes.trim(),
-      driveImageUrl: driveImageUrl.trim(),
+      driveImageUrl: joinedUrl,
       status: isPass ? 'Pass' : 'Fail',
       darkNoiseRows: [...darkNoiseRows]
     };
 
     onAddRecord(newRecord);
     setNotes('');
-    setDriveImageUrl('');
+    setDriveImageUrls(['']);
     setSuccessMsg('บันทึกผลตรวจสอบสัญญาณรบกวนมืด (Dark Noise) F8-2 และความสม่ำเสมอพิกเซล F5 สำเร็จ!');
     setTimeout(() => setSuccessMsg(''), 4000);
   };
@@ -561,8 +586,10 @@ export default function F5UniformityQC({
           {/* Drive & Notes fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3">
             <div>
-              <label className="block text-xs font-sans text-slate-500 mb-1.5 font-semibold flex items-center justify-between">
-                <span>บันทึกภาพถ่ายการประเมินความสม่ำเสมอพิกเซล (Google Drive Link / ID)</span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-sans text-slate-700 font-bold flex items-center gap-1.5">
+                  📁 รายการภาพถ่ายประเมินความสม่ำเสมอพิกเซล (Google Drive Links / IDs)
+                </span>
                 <label className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer select-none">
                   {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                   <span>{googleToken ? 'อัปโหลดเข้า Drive / เลือกไฟล์' : 'เลือกไฟล์ภาพในเครื่อง'}</span>
@@ -574,52 +601,81 @@ export default function F5UniformityQC({
                     disabled={isUploading}
                   />
                 </label>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="เช่น https://drive.google.com/file/d/1VRMs-..."
-                  value={driveImageUrl}
-                  onChange={(e) => setDriveImageUrl(e.target.value)}
-                  className="flex-1 bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 font-sans focus:outline-none"
-                  id="f5-drive-url-input"
-                />
-                {driveImageUrl && (
-                  <a
-                    href={getDriveOriginalUrl(driveImageUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 flex items-center justify-center transition cursor-pointer"
-                  >
-                    <LinkIcon className="w-4 h-4" />
-                  </a>
-                )}
               </div>
-              
-              {driveImageUrl && (
-                <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-3">
-                  <img
-                    src={getDriveDirectImageUrl(driveImageUrl)}
-                    alt="Preview"
-                    className="w-20 h-20 object-contain bg-slate-200 rounded border border-slate-200"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=200&auto=format&fit=crop';
-                    }}
-                  />
-                  <div>
-                    <span className="text-xs text-slate-400 font-medium font-sans">พรีวิวรูปภาพตรวจสอบ:</span>
-                    <p className="text-xs text-slate-800 font-medium font-sans truncate max-w-[200px]">รูปแผ่นสัญญาณ Exposure Profile</p>
+
+              <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                {driveImageUrls.map((urlVal, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs font-mono text-slate-400 font-bold">#{idx + 1}</span>
+                      <input
+                        type="text"
+                        placeholder="วางลิงก์ เช่น https://drive.google.com/file/d/..."
+                        value={urlVal}
+                        onChange={(e) => handleUrlFieldChange(idx, e.target.value)}
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-sans focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        id={`f5-drive-url-input-${idx}`}
+                      />
+                      {urlVal && (
+                        <a
+                          href={getDriveOriginalUrl(urlVal)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg border border-slate-200 aspect-square flex items-center justify-center transition cursor-pointer"
+                          title="เปิดภาพใน Drive"
+                        >
+                          <LinkIcon className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveUrlField(idx)}
+                        className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-100 aspect-square flex items-center justify-center transition cursor-pointer"
+                        title="ลบรายการลิงก์นี้"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {urlVal && (
+                      <div className="ml-6 p-2 bg-slate-50 border border-slate-150/60 rounded-xl flex items-center gap-3">
+                        <img
+                          src={getDriveDirectImageUrl(urlVal)}
+                          alt={`Preview #${idx + 1}`}
+                          className="w-12 h-12 object-contain bg-slate-200 rounded border border-slate-250 animate-fade-in"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=200&auto=format&fit=crop';
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[10px] text-slate-400 font-bold block">พรีวิวรูปภาพ #{idx + 1}:</span>
+                          <span className="text-[10px] text-slate-600 truncate block font-mono">
+                            {urlVal.length > 40 ? urlVal.substring(0, 40) + '...' : urlVal}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddUrlField}
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-indigo-600 hover:text-indigo-800 border border-slate-200 text-xs font-semibold rounded-xl cursor-pointer transition select-none"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>เพิ่มช่องวางลิงก์ภาพถ่าย (+ Add image link)</span>
+              </button>
             </div>
 
             <div>
               <label className="block text-xs font-sans text-slate-500 mb-1.5 font-semibold">พยาธิสภาพข้อเสอแนะ (Remarks)</label>
               <textarea
                 placeholder="เช่น การประเมินกระจายคริสตัลเป็นไปตามสมมาตร ไม่พบสิ่งแปลกปลอมกวนสัญญาณภาพ"
-                rows={3}
+                rows={4}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500"

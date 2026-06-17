@@ -95,8 +95,7 @@ export default function PreviewReportModal({
     { label: 'เครื่องหมายหรือตัวบ่งชี้ทิศรังสี (Side Markers)', status: rec.markers }
   ];
 
-  const imageUrl = getDriveDirectImageUrl(record.driveImageUrl);
-  const originalUrl = getDriveOriginalUrl(record.driveImageUrl);
+  const driveImageUrls = record.driveImageUrl ? record.driveImageUrl.split(',').map((u: string) => u.trim()).filter(Boolean) : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs font-sans">
@@ -362,37 +361,46 @@ export default function PreviewReportModal({
               )}
 
               {/* Google Drive Test Pattern/Receptor Image embed section */}
-              {record.driveImageUrl && (
+              {driveImageUrls.length > 0 && (
                 <div className="mb-8 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                  <span className="text-xs text-slate-500 font-medium block mb-2.5">ภาพประกอบการตรวจวัดคุณภาพจากโฟลเดอร์รังสี (Drive Attachment)</span>
-                  <div className="flex flex-col sm:flex-row items-center gap-4">
-                    <img
-                      src={imageUrl}
-                      alt="QC Test Profile"
-                      className="w-48 h-auto object-contain rounded-lg border border-slate-200 bg-slate-200"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        console.warn("Direct Drive image rendering failed. Swapped to template outline.");
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                    <div className="flex-1 space-y-2">
-                      <p className="text-xs text-slate-600 leading-normal">
-                        ภาพวิเคราะห์ที่เชื่อมต่อตรงจาก Google Drive และเก็บบันทึกในฐานข้อมูลโรงพยาบาลรหัสเครื่องตรวจชิ้นนี้ 
-                      </p>
-                      
-                      <div className="flex flex-wrap gap-2 pt-1 no-print">
-                        <a
-                          href={originalUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-medium rounded-lg transition cursor-pointer"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>เปิดดูไฟล์ภาพในแท็บใหม่ (Google Drive)</span>
-                        </a>
-                      </div>
-                    </div>
+                  <span className="text-xs text-slate-500 font-semibold block mb-3">
+                    ภาพประกอบการตรวจวัดคุณภาพจากโฟลเดอร์รังสี ({driveImageUrls.length} รูปภาพ)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {driveImageUrls.map((url, idx) => {
+                      const directUrl = getDriveDirectImageUrl(url);
+                      const origUrl = getDriveOriginalUrl(url);
+                      return (
+                        <div key={idx} className="bg-white p-3 border border-slate-200 rounded-lg flex flex-col justify-between gap-3">
+                          <div className="flex justify-center bg-slate-100 p-2 rounded-md h-36 border border-slate-155">
+                            <img
+                              src={directUrl}
+                              alt={`QC Test Profile ${idx + 1}`}
+                              className="max-h-full max-w-full object-contain rounded"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                console.warn("Direct Drive image rendering failed. Swapped to fallback.");
+                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=200&auto=format&fit=crop';
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between no-print gap-2">
+                            <span className="text-[10px] text-slate-400 font-mono truncate flex-1 block">
+                              {url.length > 25 ? url.substring(0, 25) + '...' : url}
+                            </span>
+                            <a
+                              href={origUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-indigo-700 hover:text-indigo-950 text-[10px] font-semibold rounded-md border border-slate-200 transition cursor-pointer"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>เปิดดูต้นฉบับ</span>
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
